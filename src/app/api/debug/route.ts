@@ -22,7 +22,7 @@ export async function GET() {
   const match = raw.match(/redis:\/\/default:([^@]+)@([^:]+):(\d+)/);
   results.parsed = match
     ? { host: match[2], port: match[3], tokenLen: match[1].length, restUrl: `https://${match[2]}` }
-    : "无法解析;
+    : "无法解析";
 
   // 测试 Redis
   try {
