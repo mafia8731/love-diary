@@ -1,6 +1,6 @@
 import { Redis } from "@upstash/redis";
 
-const redis = Redis.fromEnv();
+const redis = new Redis({ url: process.env.REDIS_URL! });
 
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 
