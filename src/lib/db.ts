@@ -1,6 +1,23 @@
 import { Redis } from "@upstash/redis";
 
-const redis = Redis.fromEnv();
+// 解析 REDIS_URL（Upstash on Vercel 的格式：redis://default:password@host:port）
+function createRedis(): Redis {
+  const rawUrl = process.env.REDIS_URL;
+  if (!rawUrl) return new Redis({ url: "http://localhost", token: "no-url" });
+
+  // 格式: redis://default:password@host:port
+  const match = rawUrl.match(/redis:\/\/default:([^@]+)@([^:]+):(\d+)/);
+  if (match) {
+    const token = match[1];
+    const host = match[2];
+    // Upstash REST API 用 HTTPS
+    return new Redis({ url: `https://${host}`, token });
+  }
+
+  return new Redis({ url: rawUrl, token: "fallback" });
+}
+
+const redis = createRedis();
 
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 
