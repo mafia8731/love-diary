@@ -1,31 +1,33 @@
-import { Redis } from "@upstash/redis";
+import Redis from "ioredis";
 
-// 解析 REDIS_URL（Upstash on Vercel 的格式：redis://default:password@host:port）
-function createRedis(): Redis {
-  const rawUrl = process.env.REDIS_URL;
-  if (!rawUrl) return new Redis({ url: "http://localhost", token: "no-url" });
+const redis = new Redis(process.env.REDIS_URL! + "?family=0", {
+  tls: { rejectUnauthorized: false },
+  maxRetriesPerRequest: 1,
+  retryStrategy: () => null,
+  lazyConnect: true,
+});
 
-  // 格式: redis://default:password@host:port
-  const match = rawUrl.match(/redis:\/\/default:([^@]+)@([^:]+):(\d+)/);
-  if (match) {
-    const token = match[1];
-    const host = match[2];
-    // Upstash REST API 用 HTTPS
-    return new Redis({ url: `https://${host}`, token });
+// 延迟连接（仅在首次操作时连接）
+let connected = false;
+async function ensureConnected() {
+  if (!connected) {
+    try { await redis.connect(); connected = true; } catch {}
   }
-
-  return new Redis({ url: rawUrl, token: "fallback" });
 }
-
-const redis = createRedis();
 
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 
 async function readTable<T>(name: string): Promise<T[]> {
-  try { const data = await redis.get<T[]>(name); return data || []; } catch { return []; }
+  try {
+    await ensureConnected();
+    const data = await redis.get(name);
+    return data ? JSON.parse(data) : [];
+  } catch { return []; }
 }
+
 async function writeTable<T>(name: string, data: T[]): Promise<void> {
-  try { await redis.set(name, data as any); } catch (e) { console.error("[DB] write failed:", e); throw e; }
+  await ensureConnected();
+  await redis.set(name, JSON.stringify(data));
 }
 
 export interface Diary { id: string; userId: string; date: string; title: string; content: string; mood: string; weather: string; location: string; createdAt: string; updatedAt: string; }
@@ -76,7 +78,6 @@ export async function deletePhoto(id: string): Promise<boolean> {
   if (idx === -1) return false; list.splice(idx, 1); await writeTable("photos", list); return true;
 }
 
-// ===== Private Photos =====
 export async function getPrivatePhotos(): Promise<Photo[]> {
   return (await readTable<Photo>("private-photos")).sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
 }
@@ -143,7 +144,6 @@ export async function deleteWish(id: string): Promise<boolean> {
 }
 
 // ===== Uploads =====
-import path from "path";
 import fs from "fs";
 export function getUploadDir(): string {
   const dir = "/tmp/uploads";
