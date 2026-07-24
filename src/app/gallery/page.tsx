@@ -1,18 +1,36 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import EncryptedImage from "@/components/EncryptedImage";
 import { ArrowLeft, X, Plus, Upload, ImagePlus, CheckCircle, Trash2, LayoutGrid, LayoutList, Lock } from "lucide-react";
 import Link from "next/link";
 import { compressImage, encryptDataUrl } from "@/lib/compress";
 
-interface Photo { id: string; public_url: string; caption: string; createdAt: string; }
+interface PhotoMeta { id: string; caption: string; createdAt: string; userId: string; hasData: boolean; }
+interface Photo extends PhotoMeta { public_url: string; }
+
+function LazyPhoto({ photo, onClick }: { photo: PhotoMeta; onClick: () => void }) {
+  const [url, setUrl] = useState("");
+  const loaded = useRef(false);
+
+  useEffect(() => {
+    if (loaded.current) return;
+    loaded.current = true;
+    fetch(`/api/photos-data?id=${photo.id}`).then(r => r.json())
+      .then(d => { if (d.public_url) setUrl(d.public_url); });
+  }, [photo.id]);
+
+  if (!url) return <div className="w-full h-full bg-gray-100 animate-pulse rounded-2xl" />;
+
+  return <img src={url} alt={photo.caption || ""} className="w-full h-full object-cover" loading="lazy"
+    onClick={onClick} />;
+}
 
 export default function GalleryPage() {
-  const [photos, setPhotos] = useState<Photo[]>([]);
+  const [photos, setPhotos] = useState<PhotoMeta[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<Photo | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedData, setSelectedData] = useState<string>("");
   const [uploading, setUploading] = useState(false);
   const [uploadDone, setUploadDone] = useState(false);
   const [previews, setPreviews] = useState<string[]>([]);
@@ -38,17 +56,21 @@ export default function GalleryPage() {
     if (files.length === 0) return;
     setUploading(true);
     for (const f of files) {
-      // 前端压缩
       const compressed = await compressImage(f, 1200, 0.7);
       const encrypted = await encryptDataUrl(compressed);
-
-      const fd = new FormData();
-      fd.append("dataUrl", encrypted);
+      const fd = new FormData(); fd.append("dataUrl", encrypted);
       await fetch("/api/photos-data", { method: "POST", body: fd });
     }
     setFiles([]); setPreviews([]);
     setUploading(false); setUploadDone(true); load();
     setTimeout(() => setUploadDone(false), 2000);
+  };
+
+  const openPhoto = async (p: PhotoMeta) => {
+    setSelectedId(p.id);
+    const res = await fetch(`/api/photos-data?id=${p.id}`);
+    const d = await res.json();
+    setSelectedData(d.public_url || "");
   };
 
   const toggleSelect = (id: string) => {
@@ -69,7 +91,7 @@ export default function GalleryPage() {
   const deleteSingle = async (id: string) => {
     if (!confirm("删除这张照片？")) return;
     await fetch("/api/photos-data", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
-    setSelected(null); load();
+    setSelectedId(null); setSelectedData(""); load();
   };
 
   const gridClass = cols === 2 ? "grid-cols-2" : cols === 3 ? "grid-cols-3" : "grid-cols-4";
@@ -81,21 +103,10 @@ export default function GalleryPage() {
           <Link href="/home" className="text-choco/40 hover:text-choco"><ArrowLeft className="w-5 h-5" /></Link>
           <h1 className="text-2xl font-display text-choco">🖼️ 照片墙</h1>
           <div className="flex items-center gap-1.5">
-            <Link href="/gallery/private">
-              <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-                className="flex items-center justify-center w-10 h-10 rounded-full bg-choco/10 text-choco/40 hover:bg-choco/20"><Lock className="w-4 h-4" /></motion.div>
-            </Link>
-            <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-              onClick={() => setCols(cols === 2 ? 3 : cols === 3 ? 4 : 2)}
-              className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 text-choco/40">
-              {cols === 2 ? <LayoutList className="w-4 h-4" /> : <LayoutGrid className="w-4 h-4" />}{cols}
-            </motion.button>
-            <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-              onClick={() => { setDeleteMode(!deleteMode); setSelectedIds(new Set()); }}
-              className={`flex items-center justify-center w-10 h-10 rounded-full ${deleteMode ? "bg-red-100 text-red-500" : "bg-gray-100 text-choco/40"}`}><Trash2 className="w-4 h-4" /></motion.button>
-            <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-              onClick={() => fileRef.current?.click()}
-              className="flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-r from-rose to-coral text-white shadow-md"><Plus className="w-5 h-5" /></motion.button>
+            <Link href="/gallery/private"><motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} className="flex items-center justify-center w-10 h-10 rounded-full bg-choco/10 text-choco/40 hover:bg-choco/20"><Lock className="w-4 h-4" /></motion.div></Link>
+            <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => setCols(cols === 2 ? 3 : cols === 3 ? 4 : 2)} className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 text-choco/40">{cols === 2 ? <LayoutList className="w-4 h-4" /> : <LayoutGrid className="w-4 h-4" />}{cols}</motion.button>
+            <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => { setDeleteMode(!deleteMode); setSelectedIds(new Set()); }} className={`flex items-center justify-center w-10 h-10 rounded-full ${deleteMode ? "bg-red-100 text-red-500" : "bg-gray-100 text-choco/40"}`}><Trash2 className="w-4 h-4" /></motion.button>
+            <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => fileRef.current?.click()} className="flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-r from-rose to-coral text-white shadow-md"><Plus className="w-5 h-5" /></motion.button>
           </div>
         </div>
 
@@ -120,17 +131,12 @@ export default function GalleryPage() {
                     {previews.map((src, i) => (
                       <div key={i} className="relative w-20 h-20 rounded-xl overflow-hidden">
                         <img src={src} alt="" className="w-full h-full object-cover" />
-                        <button onClick={() => { setFiles(prev => prev.filter((_, j) => j !== i)); setPreviews(prev => prev.filter((_, j) => j !== i)); }}
-                          className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/40 text-white flex items-center justify-center"><X className="w-3 h-3" /></button>
+                        <button onClick={() => { setFiles(prev => prev.filter((_, j) => j !== i)); setPreviews(prev => prev.filter((_, j) => j !== i)); }} className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/40 text-white flex items-center justify-center"><X className="w-3 h-3" /></button>
                       </div>
                     ))}
-                    <button onClick={() => fileRef.current?.click()}
-                      className="w-20 h-20 rounded-xl border-2 border-dashed border-rose/30 flex items-center justify-center text-rose/40 hover:border-rose"><ImagePlus className="w-6 h-6" /></button>
+                    <button onClick={() => fileRef.current?.click()} className="w-20 h-20 rounded-xl border-2 border-dashed border-rose/30 flex items-center justify-center text-rose/40 hover:border-rose"><ImagePlus className="w-6 h-6" /></button>
                   </div>
-                  <button onClick={handleUpload} disabled={uploading}
-                    className="w-full py-2.5 bg-gradient-to-r from-rose to-coral text-white rounded-xl text-sm font-display flex items-center justify-center gap-2 disabled:opacity-50">
-                    <Upload className="w-4 h-4" /> {uploading ? "压缩上传中..." : `上传 ${files.length} 张`}
-                  </button>
+                  <button onClick={handleUpload} disabled={uploading} className="w-full py-2.5 bg-gradient-to-r from-rose to-coral text-white rounded-xl text-sm font-display flex items-center justify-center gap-2 disabled:opacity-50"><Upload className="w-4 h-4" /> {uploading ? "压缩上传中..." : `上传 ${files.length} 张`}</button>
                 </div>
               )}
             </motion.div>
@@ -146,8 +152,8 @@ export default function GalleryPage() {
               {photos.map((p, i) => (
                 <motion.div key={p.id} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.02 }}
                   className={`relative aspect-square rounded-2xl overflow-hidden cursor-pointer hover:shadow-lg transition-all ${deleteMode ? "hover:scale-100" : "hover:scale-[1.02]"}`}
-                  onClick={() => deleteMode ? toggleSelect(p.id) : setSelected(p)}>
-                  <EncryptedImage src={p.public_url} alt={p.caption || ""} className="w-full h-full object-cover" />
+                  onClick={() => deleteMode ? toggleSelect(p.id) : openPhoto(p)}>
+                  <LazyPhoto photo={p} onClick={() => openPhoto(p)} />
                   {deleteMode && (
                     <div className={`absolute inset-0 flex items-center justify-center ${selectedIds.has(p.id) ? "bg-rose/30" : "bg-black/10 hover:bg-black/20"}`}>
                       <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${selectedIds.has(p.id) ? "bg-rose border-rose" : "border-white"}`}>
@@ -160,14 +166,13 @@ export default function GalleryPage() {
             </motion.div>}
       </div>
 
-      {selected && (
-        <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4" onClick={() => setSelected(null)}>
+      {selectedId && selectedData && (
+        <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4" onClick={() => { setSelectedId(null); setSelectedData(""); }}>
           <div className="absolute top-6 right-6 flex gap-3">
-            <button onClick={() => deleteSingle(selected.id)} className="text-white/50 hover:text-red-400"><Trash2 className="w-6 h-6" /></button>
-            <button onClick={() => setSelected(null)} className="text-white/80 hover:text-white"><X className="w-8 h-8" /></button>
+            <button onClick={() => deleteSingle(selectedId)} className="text-white/50 hover:text-red-400"><Trash2 className="w-6 h-6" /></button>
+            <button onClick={() => { setSelectedId(null); setSelectedData(""); }} className="text-white/80 hover:text-white"><X className="w-8 h-8" /></button>
           </div>
-          <EncryptedImage src={selected.public_url} alt="" className="max-w-full max-h-[85vh] rounded-2xl object-contain" onClick={(e: React.MouseEvent) => e.stopPropagation()} />
-          {selected.caption && <p className="absolute bottom-8 text-white/80 text-sm">{selected.caption}</p>}
+          <img src={selectedData} alt="" className="max-w-full max-h-[85vh] rounded-2xl object-contain" />
         </div>
       )}
     </div>

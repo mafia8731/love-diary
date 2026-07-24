@@ -3,8 +3,12 @@ import { createClient } from "redis";
 let client: any = null;
 
 async function getClient() {
-  if (!client) {
-    client = createClient({ url: process.env.REDIS_URL });
+  if (!client || !client.isOpen) {
+    if (client) try { await client.disconnect(); } catch {}
+    client = createClient({
+      url: process.env.REDIS_URL,
+      socket: { connectTimeout: 5000, reconnectStrategy: false },
+    });
     client.on("error", () => {});
     await client.connect();
   }
@@ -62,6 +66,9 @@ export async function deleteDiary(id: string): Promise<boolean> {
 
 export async function getPhotos(): Promise<Photo[]> {
   return (await readTable<Photo>("photos")).sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
+}
+export async function getPhoto(id: string): Promise<Photo | undefined> {
+  return (await readTable<Photo>("photos")).find(p => p.id === id);
 }
 export async function addPhoto(p: Omit<Photo, "id" | "createdAt">): Promise<Photo> {
   const list = await readTable<Photo>("photos"); const item: Photo = { ...p, id: genId(), createdAt: new Date().toISOString() };
