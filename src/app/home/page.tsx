@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, Heart, Sparkles, MessageCircle, ListTodo, Camera, CalendarDays, LogOut, CircleUser, X, Save, ImagePlus, CheckCircle } from "lucide-react";
+import { ChevronLeft, ChevronRight, Heart, Sparkles, MessageCircle, ListTodo, Camera, CalendarDays, LogOut, CircleUser, X, Save, ImagePlus, CheckCircle, Plus, Edit3 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -19,11 +19,10 @@ const ALL_MOODS = [
   { value: "proud", emoji: "😎", label: "得意" }, { value: "shy", emoji: "😳", label: "害羞" },
 ];
 const MOOD_MAP: Record<string, string> = Object.fromEntries(ALL_MOODS.map(m => [m.value, m.emoji]));
-
 const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
 const ANNIVERSARY_DATE = new Date("2023-01-01");
 
-const fadeUp = { initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -5 } };
+const fade = { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -5 } };
 
 export default function CalendarHome() {
   const router = useRouter();
@@ -35,17 +34,17 @@ export default function CalendarHome() {
   const [anniversaries, setAnniversaries] = useState<Anniversary[]>([]);
   const [photos, setPhotos] = useState<{ date: string }[]>([]);
   const [daysCount, setDaysCount] = useState(0);
-  const [monthKey, setMonthKey] = useState(0); // 月份切换动画 key
+  const [monthKey, setMonthKey] = useState(0);
 
-  // 弹窗
+  // 弹窗状态
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [editingDiary, setEditingDiary] = useState<Diary | null>(null);
+  const [isEditing, setIsEditing] = useState(false); // view vs edit mode
   const [editContent, setEditContent] = useState("");
   const [editMood, setEditMood] = useState("");
   const [editFiles, setEditFiles] = useState<File[]>([]);
   const [editPreviews, setEditPreviews] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false); // 保存成功状态
+  const [saved, setSaved] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const fetchData = useCallback(async () => {
@@ -63,13 +62,17 @@ export default function CalendarHome() {
 
   useEffect(() => { fetchData(); setDaysCount(Math.floor((Date.now() - ANNIVERSARY_DATE.getTime()) / 86400000)); }, [fetchData]);
 
+  // 获取某天的所有日记
+  const getDateDiaries = (date: string) => diaries.filter(d => d.date === date);
+
+  // 点击日期 → 查看模式
   const openDate = (dateStr: string) => {
-    const existing = diaries.find(d => d.date === dateStr);
-    setEditingDiary(existing || null);
-    setEditContent(existing?.content || "");
-    setEditMood(existing?.mood || "");
+    const dateDiaries = diaries.filter(d => d.date === dateStr);
+    const myDiary = dateDiaries.find(d => d.userId === username);
+    setEditContent(myDiary?.content || "");
+    setEditMood(myDiary?.mood || "");
     setEditFiles([]); setEditPreviews([]);
-    setSaved(false);
+    setSaved(false); setIsEditing(false);
     setSelectedDate(dateStr);
   };
 
@@ -81,21 +84,17 @@ export default function CalendarHome() {
 
   const saveDiary = async () => {
     setSaving(true);
-    const body = { content: editContent.trim(), mood: editMood };
-    if (editingDiary) {
-      await fetch(`/api/diaries/${editingDiary.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    } else if (editContent.trim()) {
-      await fetch("/api/diaries", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...body, date: selectedDate }) });
-    }
+    await fetch("/api/diaries", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date: selectedDate, content: editContent.trim(), mood: editMood, userId: username }),
+    });
     for (const f of editFiles) {
       const fd = new FormData(); fd.append("file", f);
       await fetch("/api/photos-data", { method: "POST", body: fd });
     }
-    // 显示成功状态
     setSaving(false); setSaved(true);
-    await fetchData(); // 刷新数据
-    // 短暂显示成功动画后关闭
-    setTimeout(() => setSelectedDate(null), 600);
+    await fetchData();
+    setTimeout(() => { setSelectedDate(null); setIsEditing(false); }, 600);
   };
 
   const prevMonth = () => { setMonthKey(k => k + 1); if (month === 1) { setYear(year - 1); setMonth(12); } else setMonth(month - 1); };
@@ -109,6 +108,7 @@ export default function CalendarHome() {
   }));
 
   const handleSignOut = async () => { await fetch("/api/auth/logout", { method: "POST" }); router.push("/"); };
+  const userBadgeCls = (u: string) => u === "guohanxi" ? "bg-blue-100 text-blue-600" : "bg-rose-100 text-rose-600";
 
   return (
     <div className="min-h-screen bg-cream">
@@ -129,10 +129,9 @@ export default function CalendarHome() {
 
         {/* 月份切换 */}
         <div className="flex items-center justify-between mb-4">
-          <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={prevMonth} className="p-2 text-choco/40 hover:text-choco transition-colors"><ChevronLeft className="w-5 h-5" /></motion.button>
-          <motion.h2 key={monthKey} initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
-            className="text-xl font-display text-choco">{year}年{month}月</motion.h2>
-          <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={nextMonth} className="p-2 text-choco/40 hover:text-choco transition-colors"><ChevronRight className="w-5 h-5" /></motion.button>
+          <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={prevMonth} className="p-2 text-choco/40 hover:text-choco"><ChevronLeft className="w-5 h-5" /></motion.button>
+          <motion.h2 key={monthKey} initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="text-xl font-display text-choco">{year}年{month}月</motion.h2>
+          <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={nextMonth} className="p-2 text-choco/40 hover:text-choco"><ChevronRight className="w-5 h-5" /></motion.button>
         </div>
 
         {/* 星期 */}
@@ -141,33 +140,41 @@ export default function CalendarHome() {
         </div>
 
         {/* 日历格子 */}
-        <motion.div key={monthKey} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.3 }} className="grid grid-cols-7 gap-1">
+        <motion.div key={monthKey} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="grid grid-cols-7 gap-1">
           {Array.from({ length: firstDay }).map((_, i) => <div key={`e${i}`} />)}
           {cells.map(({ day, date }) => {
-            const d = diaries.find(x => x.date === date);
-            const mood = d?.mood || "";
+            const dateDiaries = diaries.filter(x => x.date === date);
+            const moods = dateDiaries.map(x => x.mood).filter(Boolean);
             const anni = anniversaries.find(a => a.date === date);
             const hasPhoto = photos.some(p => p.date === date);
             const isToday = date === today;
             return (
-              <motion.button key={date}
-                whileHover={{ scale: 1.08, y: -2 }}
-                whileTap={{ scale: 0.88 }}
+              <motion.button key={date} whileHover={{ scale: 1.08, y: -2 }} whileTap={{ scale: 0.88 }}
                 onClick={() => openDate(date)}
                 className={`aspect-square rounded-xl flex flex-col items-center justify-center relative transition-colors text-sm
                   ${isToday ? "bg-rose text-white shadow-lg shadow-rose/25" : "hover:bg-rose/8 text-choco/70"}`}>
                 {isToday && <motion.div className="absolute inset-0 rounded-xl" animate={{ boxShadow: ["0 0 0 0 rgba(248,165,194,0.4)", "0 0 0 6px rgba(248,165,194,0)", "0 0 0 0 rgba(248,165,194,0.4)"] }} transition={{ duration: 2, repeat: Infinity }} />}
                 <span className="text-xs relative z-10">{day}</span>
-                {mood ? (
-                  <motion.span key={mood + date} initial={{ scale: 0, rotate: -20 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: "spring", stiffness: 400, damping: 12 }}
-                    className="text-lg leading-none relative z-10">{MOOD_MAP[mood] || mood}</motion.span>
+                {moods.length > 0 ? (
+                  <div className="flex gap-0.5 relative z-10">
+                    {moods.slice(0, 2).map((m, i) => (
+                      <motion.span key={i} initial={{ scale: 0, rotate: -20 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: "spring", stiffness: 400, damping: 12, delay: i * 0.1 }}
+                        className="text-sm leading-none">{MOOD_MAP[m] || m}</motion.span>
+                    ))}
+                  </div>
                 ) : anni ? (
-                  <motion.span animate={{ scale: [1, 1.15, 1] }} transition={{ duration: 2, repeat: Infinity }}
-                    className="text-lg leading-none relative z-10">{anni.icon}</motion.span>
+                  <motion.span animate={{ scale: [1, 1.15, 1] }} transition={{ duration: 2, repeat: Infinity }} className="text-lg leading-none relative z-10">{anni.icon}</motion.span>
                 ) : hasPhoto ? (
                   <Camera className="w-3 h-3 text-choco/20 mt-0.5 relative z-10" />
                 ) : null}
-                {mood && d && <div className={`absolute bottom-1 w-1.5 h-1.5 rounded-full ${d.userId === "guohanxi" ? "bg-blue-400" : "bg-rose"}`} />}
+                {/* 用户标记 */}
+                {dateDiaries.length > 0 && (
+                  <div className="absolute bottom-0.5 flex gap-0.5">
+                    {dateDiaries.map((d, i) => (
+                      <div key={i} className={`w-1.5 h-1.5 rounded-full ${d.userId === "guohanxi" ? "bg-blue-400" : "bg-rose"}`} />
+                    ))}
+                  </div>
+                )}
               </motion.button>
             );
           })}
@@ -192,81 +199,118 @@ export default function CalendarHome() {
         </div>
       </div>
 
-      {/* 日记弹窗 */}
+      {/* 日期弹窗 */}
       <AnimatePresence>
-        {selectedDate && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
-            onClick={() => setSelectedDate(null)}>
-            <motion.div initial={{ y: 100, opacity: 0, scale: 0.95 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: 100, opacity: 0, scale: 0.95 }}
-              transition={{ type: "spring", stiffness: 300, damping: 25 }}
-              onClick={e => e.stopPropagation()}
-              className="bg-white rounded-2xl w-full max-w-md max-h-[85vh] overflow-y-auto shadow-2xl">
-              <div className="p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-display text-lg text-choco">
-                    {selectedDate}
-                    {editingDiary && <span className={`text-xs ml-2 ${editingDiary.userId === "guohanxi" ? "text-blue-400" : "text-rose"}`}>· {editingDiary.userId}</span>}
-                  </h3>
-                  <button onClick={() => setSelectedDate(null)} className="text-choco/30 hover:text-choco transition-colors"><X className="w-5 h-5" /></button>
-                </div>
+        {selectedDate && (() => {
+          const dateDiaries = diaries.filter(d => d.date === selectedDate);
+          const myDiary = dateDiaries.find(d => d.userId === username);
+          const otherDiary = dateDiaries.find(d => d.userId !== username);
+          return (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
+              onClick={() => { setSelectedDate(null); setIsEditing(false); }}>
+              <motion.div initial={{ y: 100, opacity: 0, scale: 0.95 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: 100, opacity: 0, scale: 0.95 }}
+                transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                onClick={e => e.stopPropagation()}
+                className="bg-white rounded-2xl w-full max-w-md max-h-[85vh] overflow-y-auto shadow-2xl">
+                <div className="p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-display text-lg text-choco">{selectedDate}</h3>
+                    <button onClick={() => { setSelectedDate(null); setIsEditing(false); }} className="text-choco/30 hover:text-choco"><X className="w-5 h-5" /></button>
+                  </div>
 
-                {/* 成功反馈 */}
-                <AnimatePresence>
-                  {saved && (
-                    <motion.div {...fadeUp} className="mb-4 p-3 bg-green-50 border border-green-200 rounded-xl text-sm text-green-600 flex items-center gap-2">
-                      <CheckCircle className="w-4 h-4" /> 已保存！
-                    </motion.div>
+                  {/* 成功反馈 */}
+                  <AnimatePresence>
+                    {saved && (
+                      <motion.div {...fade} className="mb-4 p-3 bg-green-50 border border-green-200 rounded-xl text-sm text-green-600 flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4" /> 已保存！
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* ===== 查看模式：显示双方心情 ===== */}
+                  {!isEditing && (
+                    <div className="space-y-3">
+                      {dateDiaries.length === 0 && (
+                        <p className="text-center text-choco/30 py-4 text-sm">这一天还没有记录</p>
+                      )}
+                      {dateDiaries.map(d => (
+                        <motion.div key={d.id} {...fade} className={`p-4 rounded-xl border ${d.userId === "guohanxi" ? "bg-blue-50/50 border-blue-100" : "bg-rose-50/50 border-rose-100"}`}>
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${userBadgeCls(d.userId)}`}>{d.userId}</span>
+                            {d.mood && <span className="text-2xl">{MOOD_MAP[d.mood] || d.mood}</span>}
+                          </div>
+                          {d.content && <p className="text-sm text-choco/70 whitespace-pre-wrap">{d.content}</p>}
+                        </motion.div>
+                      ))}
+                      {/* 添加按钮 */}
+                      <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.95 }}
+                        onClick={() => {
+                          setEditContent(myDiary?.content || "");
+                          setEditMood(myDiary?.mood || "");
+                          setEditFiles([]); setEditPreviews([]);
+                          setIsEditing(true);
+                        }}
+                        className="w-full py-3 border-2 border-dashed border-rose/20 rounded-xl text-rose/50 hover:border-rose hover:text-rose transition-colors flex items-center justify-center gap-2 text-sm">
+                        <Plus className="w-4 h-4" />
+                        {myDiary ? "编辑我的记录" : "添加我的心情"}
+                      </motion.button>
+                    </div>
                   )}
-                </AnimatePresence>
 
-                {/* 心情 */}
-                <div className="flex gap-1.5 mb-4 flex-wrap">
-                  {ALL_MOODS.map(m => (
-                    <motion.button key={m.value} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.9 }}
-                      onClick={() => setEditMood(editMood === m.value ? "" : m.value)}
-                      className={`px-2.5 py-1.5 rounded-full text-xs transition-all ${editMood === m.value ? "bg-rose/20 text-rose-dark border border-rose shadow-sm" : "bg-gray-50 text-choco/50 border border-transparent hover:border-rose/30"}`}>
-                      {m.emoji} {m.label}
-                    </motion.button>
-                  ))}
+                  {/* ===== 编辑模式 ===== */}
+                  {isEditing && (
+                    <>
+                      {/* 心情选择 */}
+                      <div className="flex gap-1.5 mb-4 flex-wrap">
+                        {ALL_MOODS.map(m => (
+                          <motion.button key={m.value} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.9 }}
+                            onClick={() => setEditMood(editMood === m.value ? "" : m.value)}
+                            className={`px-2.5 py-1.5 rounded-full text-xs transition-all ${editMood === m.value ? "bg-rose/20 text-rose-dark border border-rose shadow-sm" : "bg-gray-50 text-choco/50 border border-transparent hover:border-rose/30"}`}>
+                            {m.emoji} {m.label}
+                          </motion.button>
+                        ))}
+                      </div>
+
+                      <textarea value={editContent} onChange={e => setEditContent(e.target.value)}
+                        placeholder="今天发生了什么...（可选）" rows={5}
+                        className="w-full bg-gray-50 rounded-xl p-4 text-choco/80 placeholder:text-choco/25 outline-none resize-none text-sm leading-relaxed focus:ring-2 focus:ring-rose/20 transition-all" />
+
+                      {/* 照片 */}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {editPreviews.map((src, i) => (
+                          <motion.div key={i} initial={{ scale: 0 }} animate={{ scale: 1 }} className="relative w-16 h-16 rounded-lg overflow-hidden">
+                            <img src={src} alt="" className="w-full h-full object-cover" />
+                            <button onClick={() => { setEditFiles(prev => prev.filter((_, j) => j !== i)); setEditPreviews(prev => prev.filter((_, j) => j !== i)); }}
+                              className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-black/40 text-white flex items-center justify-center"><X className="w-2.5 h-2.5" /></button>
+                          </motion.div>
+                        ))}
+                        <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.9 }}
+                          onClick={() => fileRef.current?.click()}
+                          className="w-16 h-16 rounded-lg border-2 border-dashed border-rose/30 flex items-center justify-center text-rose/40 hover:border-rose transition-colors">
+                          <ImagePlus className="w-5 h-5" />
+                        </motion.button>
+                      </div>
+                      <input ref={fileRef} type="file" accept="image/*" multiple onChange={handleFiles} className="hidden" />
+
+                      <div className="flex gap-3 mt-4">
+                        <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.95 }}
+                          onClick={() => setIsEditing(false)}
+                          className="flex-1 py-2.5 border border-rose/20 rounded-xl text-choco/50 text-sm">返回</motion.button>
+                        <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.95 }}
+                          onClick={saveDiary} disabled={saving}
+                          className="flex-1 py-2.5 bg-gradient-to-r from-rose to-coral text-white rounded-xl text-sm font-display flex items-center justify-center gap-2 disabled:opacity-50 shadow-md shadow-rose/20">
+                          {saved ? <CheckCircle className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+                          {saving ? "保存中..." : saved ? "已保存" : "保存"}
+                        </motion.button>
+                      </div>
+                    </>
+                  )}
                 </div>
-
-                <textarea value={editContent} onChange={e => setEditContent(e.target.value)}
-                  placeholder="今天发生了什么..." rows={6}
-                  className="w-full bg-gray-50 rounded-xl p-4 text-choco/80 placeholder:text-choco/25 outline-none resize-none text-sm leading-relaxed focus:ring-2 focus:ring-rose/20 transition-all" />
-
-                {/* 照片 */}
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {editPreviews.map((src, i) => (
-                    <motion.div key={i} initial={{ scale: 0 }} animate={{ scale: 1 }} className="relative w-16 h-16 rounded-lg overflow-hidden">
-                      <img src={src} alt="" className="w-full h-full object-cover" />
-                      <button onClick={() => { setEditFiles(prev => prev.filter((_, j) => j !== i)); setEditPreviews(prev => prev.filter((_, j) => j !== i)); }}
-                        className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-black/40 text-white flex items-center justify-center"><X className="w-2.5 h-2.5" /></button>
-                    </motion.div>
-                  ))}
-                  <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.9 }}
-                    onClick={() => fileRef.current?.click()}
-                    className="w-16 h-16 rounded-lg border-2 border-dashed border-rose/30 flex items-center justify-center text-rose/40 hover:border-rose transition-colors">
-                    <ImagePlus className="w-5 h-5" />
-                  </motion.button>
-                </div>
-                <input ref={fileRef} type="file" accept="image/*" multiple onChange={handleFiles} className="hidden" />
-
-                <div className="flex gap-3 mt-4">
-                  <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.95 }}
-                    onClick={() => setSelectedDate(null)}
-                    className="flex-1 py-2.5 border border-rose/20 rounded-xl text-choco/50 text-sm">取消</motion.button>
-                  <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.95 }}
-                    onClick={saveDiary} disabled={saving}
-                    className="flex-1 py-2.5 bg-gradient-to-r from-rose to-coral text-white rounded-xl text-sm font-display flex items-center justify-center gap-2 disabled:opacity-50 shadow-md shadow-rose/20">
-                    {saved ? <CheckCircle className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-                    {saving ? "保存中..." : saved ? "已保存" : "保存"}
-                  </motion.button>
-                </div>
-              </div>
+              </motion.div>
             </motion.div>
-          </motion.div>
-        )}
+          );
+        })()}
       </AnimatePresence>
     </div>
   );

@@ -27,9 +27,23 @@ export function getDiariesByMonth(year: number, month: number): Diary[] {
   return readTable<Diary>("diaries").filter(d => d.date?.startsWith(p));
 }
 export function getDiaryByDate(date: string): Diary | undefined { return readTable<Diary>("diaries").find(d => d.date === date); }
+export function getDiariesByDate(date: string): Diary[] { return readTable<Diary>("diaries").filter(d => d.date === date); }
+export function getDiaryByDateAndUser(date: string, userId: string): Diary | undefined {
+  return readTable<Diary>("diaries").find(d => d.date === date && d.userId === userId);
+}
 export function getDiary(id: string): Diary | undefined { return readTable<Diary>("diaries").find(d => d.id === id); }
 export function createDiary(d: Omit<Diary, "id" | "createdAt" | "updatedAt">): Diary {
   const list = readTable<Diary>("diaries"); const now = new Date().toISOString();
+  const item: Diary = { ...d, id: genId(), createdAt: now, updatedAt: now };
+  list.push(item); writeTable("diaries", list); return item;
+}
+export function upsertDiary(d: Omit<Diary, "id" | "createdAt" | "updatedAt">): Diary {
+  const list = readTable<Diary>("diaries"); const now = new Date().toISOString();
+  const existing = list.findIndex(x => x.date === d.date && x.userId === d.userId);
+  if (existing >= 0) {
+    list[existing] = { ...list[existing], ...d, updatedAt: now };
+    writeTable("diaries", list); return list[existing];
+  }
   const item: Diary = { ...d, id: genId(), createdAt: now, updatedAt: now };
   list.push(item); writeTable("diaries", list); return item;
 }
