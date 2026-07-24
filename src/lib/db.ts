@@ -1,12 +1,14 @@
-import { kv } from "@vercel/kv";
+import { Redis } from "@upstash/redis";
+
+const redis = Redis.fromEnv();
 
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 
 async function readTable<T>(name: string): Promise<T[]> {
-  try { return (await kv.get<T[]>(name)) || []; } catch { return []; }
+  try { const data = await redis.get<T[]>(name); return data || []; } catch { return []; }
 }
 async function writeTable<T>(name: string, data: T[]): Promise<void> {
-  await kv.set(name, data);
+  await redis.set(name, data as any);
 }
 
 export interface Diary { id: string; userId: string; date: string; title: string; content: string; mood: string; weather: string; location: string; createdAt: string; updatedAt: string; }
@@ -123,14 +125,14 @@ export async function deleteWish(id: string): Promise<boolean> {
   if (idx === -1) return false; list.splice(idx, 1); await writeTable("wishes", list); return true;
 }
 
-// ===== Uploads (Vercel 上用 /tmp) =====
+// ===== Uploads =====
 import path from "path";
 import fs from "fs";
 export function getUploadDir(): string {
-  const dir = process.env.VERCEL ? "/tmp/uploads" : path.join(process.cwd(), "public", "uploads");
+  const dir = "/tmp/uploads";
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }); return dir;
 }
 export function getPrivateUploadDir(): string {
-  const dir = process.env.VERCEL ? "/tmp/uploads/private" : path.join(process.cwd(), "public", "uploads", "private");
+  const dir = "/tmp/uploads/private";
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }); return dir;
 }
