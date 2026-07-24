@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, X, Plus, Upload, ImagePlus, CheckCircle, Trash2, LayoutGrid, LayoutList, Lock } from "lucide-react";
 import Link from "next/link";
-import { compressImage, encryptDataUrl } from "@/lib/compress";
+import { compressImage, encryptDataUrl, decryptToUrl } from "@/lib/compress";
 
 interface PhotoMeta { id: string; caption: string; createdAt: string; userId: string; hasData: boolean; }
 interface Photo extends PhotoMeta { public_url: string; }
@@ -17,7 +17,7 @@ function LazyPhoto({ photo, onClick }: { photo: PhotoMeta; onClick: () => void }
     if (loaded.current) return;
     loaded.current = true;
     fetch(`/api/photos-data?id=${photo.id}`).then(r => r.json())
-      .then(d => { if (d.public_url) setUrl(d.public_url); });
+      .then(d => { if (d.public_url) decryptToUrl(d.public_url).then(setUrl); });
   }, [photo.id]);
 
   if (!url) return <div className="w-full h-full bg-gray-100 animate-pulse rounded-2xl" />;
@@ -70,7 +70,7 @@ export default function GalleryPage() {
     setSelectedId(p.id);
     const res = await fetch(`/api/photos-data?id=${p.id}`);
     const d = await res.json();
-    setSelectedData(d.public_url || "");
+    if (d.public_url) decryptToUrl(d.public_url).then(setSelectedData);
   };
 
   const toggleSelect = (id: string) => {
