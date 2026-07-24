@@ -63,6 +63,25 @@ export function addPhoto(p: Omit<Photo, "id" | "createdAt">): Photo {
   const list = readTable<Photo>("photos"); const item: Photo = { ...p, id: genId(), createdAt: new Date().toISOString() };
   list.push(item); writeTable("photos", list); return item;
 }
+export function deletePhoto(id: string): boolean {
+  const list = readTable<Photo>("photos"); const idx = list.findIndex(p => p.id === id);
+  if (idx === -1) return false; list.splice(idx, 1); writeTable("photos", list); return true;
+}
+
+// ===== Private Photos =====
+export function getPrivatePhotos(): Photo[] { return readTable<Photo>("private-photos").sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)); }
+export function addPrivatePhoto(p: Omit<Photo, "id" | "createdAt">): Photo {
+  const list = readTable<Photo>("private-photos"); const item: Photo = { ...p, id: genId(), createdAt: new Date().toISOString() };
+  list.push(item); writeTable("private-photos", list); return item;
+}
+export function deletePrivatePhoto(id: string): boolean {
+  const list = readTable<Photo>("private-photos"); const idx = list.findIndex(p => p.id === id);
+  if (idx === -1) return false; list.splice(idx, 1); writeTable("private-photos", list); return true;
+}
+export function getPrivateUploadDir(): string {
+  const dir = path.join(process.cwd(), "public", "uploads", "private");
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }); return dir;
+}
 
 // ===== Anniversaries =====
 export function getAnniversaries(): Anniversary[] { return readTable<Anniversary>("anniversaries").sort((a, b) => +new Date(a.date) - +new Date(b.date)); }

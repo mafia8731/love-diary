@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
-import { getPhotos, addPhoto, getUploadDir } from "@/lib/db";
-import { writeFile } from "fs/promises";
+import { getPhotos, addPhoto, deletePhoto, getUploadDir } from "@/lib/db";
+import { writeFile, unlink } from "fs/promises";
 import path from "path";
 
 export async function GET() {
@@ -31,12 +31,19 @@ export async function POST(request: Request) {
     await writeFile(path.join(uploadDir, filename), buffer);
   }
 
-  const photo = addPhoto({
-    userId: session.username!,
-    diaryId,
-    filename,
-    caption,
-  });
-
+  const photo = addPhoto({ userId: session.username!, diaryId, filename, caption });
   return NextResponse.json({ ...photo, public_url: `/uploads/${filename}` });
+}
+
+export async function DELETE(request: Request) {
+  const session = await getSession();
+  if (!session.isLoggedIn) return NextResponse.json({ error: "未登录" }, { status: 401 });
+  const { id } = await request.json();
+  const photo = getPhotos().find(p => p.id === id);
+  if (photo) {
+    // 删除文件
+    try { await unlink(path.join(getUploadDir(), photo.filename)); } catch {}
+    deletePhoto(id);
+  }
+  return NextResponse.json({ ok: true });
 }
