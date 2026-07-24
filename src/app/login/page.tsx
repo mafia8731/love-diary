@@ -40,9 +40,15 @@ export default function LoginPage() {
   };
 
   // 快捷登录：填入账号密码，手动点登录
-  const quickLogin = (user: string, pass: string) => {
+  // 快捷登录：只填账号，密码手输（保护隐私）
+  const quickLogin = (user: string) => {
     setUsername(user);
-    setPassword(pass);
+    setPassword("");
+    // 聚焦密码框
+    setTimeout(() => {
+      const pw = document.querySelector('input[name="password"]') as HTMLInputElement;
+      if (pw) pw.focus();
+    }, 100);
   };
 
   return (
@@ -70,7 +76,7 @@ export default function LoginPage() {
           <p className="text-xs text-choco/40 text-center mb-3">点击直接登录</p>
           <div className="grid grid-cols-2 gap-3">
             <button
-              onClick={() => quickLogin("guohanxi", "liumengqi")}
+              onClick={() => quickLogin("guohanxi")}
               disabled={loading}
               className="flex flex-col items-center gap-1 p-3 rounded-xl border border-rose/20 hover:bg-rose/10 hover:border-rose transition-all text-choco/60 hover:text-choco disabled:opacity-40"
             >
@@ -78,7 +84,7 @@ export default function LoginPage() {
               <span className="text-sm font-display">guohanxi</span>
             </button>
             <button
-              onClick={() => quickLogin("liumengqi", "guohanxi")}
+              onClick={() => quickLogin("liumengqi")}
               disabled={loading}
               className="flex flex-col items-center gap-1 p-3 rounded-xl border border-rose/20 hover:bg-rose/10 hover:border-rose transition-all text-choco/60 hover:text-choco disabled:opacity-40"
             >
