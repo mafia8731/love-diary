@@ -39,11 +39,10 @@ export default function LoginPage() {
     doLogin(username, password);
   };
 
-  // 快捷登录：先填值，再自动提交
+  // 快捷登录：填入账号密码，手动点登录
   const quickLogin = (user: string, pass: string) => {
     setUsername(user);
     setPassword(pass);
-    setTimeout(() => doLogin(user, pass), 300);
   };
 
   return (

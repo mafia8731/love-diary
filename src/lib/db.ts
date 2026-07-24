@@ -123,6 +123,10 @@ export async function markNoteRead(id: string): Promise<void> {
   const list = await readTable<Note>("notes"); const n = list.find(x => x.id === id);
   if (n) { n.read = true; await writeTable("notes", list); }
 }
+export async function deleteNote(id: string): Promise<boolean> {
+  const list = await readTable<Note>("notes"); const idx = list.findIndex(x => x.id === id);
+  if (idx === -1) return false; list.splice(idx, 1); await writeTable("notes", list); return true;
+}
 
 export async function getWishes(): Promise<Wish[]> {
   return (await readTable<Wish>("wishes")).sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));

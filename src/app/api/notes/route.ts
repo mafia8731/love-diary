@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
-import { getNotes, createNote, markNoteRead } from "@/lib/db";
+import { getNotes, createNote, markNoteRead, deleteNote } from "@/lib/db";
 
 export async function GET() {
   const session = await getSession();
@@ -22,5 +22,13 @@ export async function PATCH(request: Request) {
   if (!session.isLoggedIn) return NextResponse.json({ error: "未登录" }, { status: 401 });
   const { id } = await request.json();
   await markNoteRead(id);
+  return NextResponse.json({ ok: true });
+}
+
+export async function DELETE(request: Request) {
+  const session = await getSession();
+  if (!session.isLoggedIn) return NextResponse.json({ error: "未登录" }, { status: 401 });
+  const { id } = await request.json();
+  await deleteNote(id);
   return NextResponse.json({ ok: true });
 }

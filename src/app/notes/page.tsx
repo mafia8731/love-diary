@@ -2,13 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Send, CircleUser, Check } from "lucide-react";
+import { ArrowLeft, Send, CircleUser, Check, X } from "lucide-react";
 import Link from "next/link";
 
 interface Note { id: string; fromUser: string; toUser: string; content: string; createdAt: string; read: boolean; }
 
 const userColor = (u: string) => u === "guohanxi" ? "bg-blue-50 border-blue-200" : "bg-rose-50 border-rose-200";
-const userAlign = (u: string, me: string) => u === me ? "ml-8" : "mr-8";
 
 export default function NotesPage() {
   const [notes, setNotes] = useState<Note[]>([]);
@@ -33,6 +32,11 @@ export default function NotesPage() {
     setSending(true);
     await fetch("/api/notes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: content.trim(), toUser }) });
     setContent(""); setSending(false); load();
+  };
+
+  const deleteIt = async (id: string) => {
+    await fetch("/api/notes", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+    load();
   };
 
   useEffect(() => {
@@ -70,7 +74,10 @@ export default function NotesPage() {
                   <span className="text-[10px] text-choco/20 ml-auto">{fmtDate(n.createdAt)}</span>
                   {n.read && <Check className="w-3 h-3 text-rose/40" />}
                 </div>
-                <p className="text-sm text-choco/70 whitespace-pre-wrap">{n.content}</p>
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm text-choco/70 whitespace-pre-wrap flex-1">{n.content}</p>
+                  <button onClick={() => deleteIt(n.id)} className="text-choco/15 hover:text-red-400 flex-shrink-0 mt-0.5"><X className="w-3.5 h-3.5" /></button>
+                </div>
               </motion.div>
             );
           })}
