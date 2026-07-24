@@ -7,7 +7,7 @@ import path from "path";
 export async function GET() {
   const session = await getSession();
   if (!session.isLoggedIn) return NextResponse.json({ error: "未登录" }, { status: 401 });
-  return NextResponse.json(getPhotos().map(p => ({
+  return NextResponse.json((await getPhotos()).map(p => ({
     ...p,
     public_url: `/uploads/${p.filename}`,
   })));
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     await writeFile(path.join(uploadDir, filename), buffer);
   }
 
-  const photo = addPhoto({ userId: session.username!, diaryId, filename, caption });
+  const photo = await addPhoto({ userId: session.username!, diaryId, filename, caption });
   return NextResponse.json({ ...photo, public_url: `/uploads/${filename}` });
 }
 
@@ -39,11 +39,11 @@ export async function DELETE(request: Request) {
   const session = await getSession();
   if (!session.isLoggedIn) return NextResponse.json({ error: "未登录" }, { status: 401 });
   const { id } = await request.json();
-  const photo = getPhotos().find(p => p.id === id);
+  const photo = (await getPhotos()).find(p => p.id === id);
   if (photo) {
     // 删除文件
     try { await unlink(path.join(getUploadDir(), photo.filename)); } catch {}
-    deletePhoto(id);
+    await deletePhoto(id);
   }
   return NextResponse.json({ ok: true });
 }

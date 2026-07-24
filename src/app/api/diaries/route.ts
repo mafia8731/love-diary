@@ -8,15 +8,15 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const year = searchParams.get("year");
   const month = searchParams.get("month");
-  if (year && month) return NextResponse.json(getDiariesByMonth(+year, +month));
-  return NextResponse.json(getDiaries());
+  if (year && month) return NextResponse.json(await getDiariesByMonth(+year, +month));
+  return NextResponse.json(await getDiaries());
 }
 
 export async function POST(request: Request) {
   const session = await getSession();
   if (!session.isLoggedIn) return NextResponse.json({ error: "未登录" }, { status: 401 });
   const body = await request.json();
-  const diary = upsertDiary({
+  const diary = await upsertDiary({
     userId: session.username!, date: body.date || new Date().toISOString().slice(0, 10),
     title: body.title || "", content: body.content || "",
     mood: body.mood || "", weather: body.weather || "", location: body.location || "",

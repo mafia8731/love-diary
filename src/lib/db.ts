@@ -1,17 +1,13 @@
-import fs from "fs";
-import path from "path";
+import { kv } from "@vercel/kv";
 
-const DATA_DIR = path.join(process.cwd(), "data");
-function ensureDir() { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true }); }
-function readTable<T>(name: string): T[] {
-  ensureDir(); const f = path.join(DATA_DIR, `${name}.json`);
-  if (!fs.existsSync(f)) return [];
-  try { return JSON.parse(fs.readFileSync(f, "utf-8")); } catch { return []; }
-}
-function writeTable<T>(name: string, data: T[]): void {
-  ensureDir(); fs.writeFileSync(path.join(DATA_DIR, `${name}.json`), JSON.stringify(data, null, 2), "utf-8");
-}
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+
+async function readTable<T>(name: string): Promise<T[]> {
+  try { return (await kv.get<T[]>(name)) || []; } catch { return []; }
+}
+async function writeTable<T>(name: string, data: T[]): Promise<void> {
+  await kv.set(name, data);
+}
 
 export interface Diary { id: string; userId: string; date: string; title: string; content: string; mood: string; weather: string; location: string; createdAt: string; updatedAt: string; }
 export interface Photo { id: string; userId: string; diaryId: string | null; filename: string; caption: string; createdAt: string; }
@@ -21,115 +17,120 @@ export interface Note { id: string; fromUser: string; toUser: string; content: s
 export interface Wish { id: string; userId: string; content: string; done: boolean; date: string; createdAt: string; }
 
 // ===== Diaries =====
-export function getDiaries(): Diary[] { return readTable<Diary>("diaries").sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)); }
-export function getDiariesByMonth(year: number, month: number): Diary[] {
+export async function getDiaries(): Promise<Diary[]> {
+  const d = await readTable<Diary>("diaries"); return d.sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
+}
+export async function getDiariesByMonth(year: number, month: number): Promise<Diary[]> {
   const p = `${year}-${String(month).padStart(2, "0")}`;
-  return readTable<Diary>("diaries").filter(d => d.date?.startsWith(p));
+  const d = await readTable<Diary>("diaries"); return d.filter(d => d.date?.startsWith(p));
 }
-export function getDiaryByDate(date: string): Diary | undefined { return readTable<Diary>("diaries").find(d => d.date === date); }
-export function getDiariesByDate(date: string): Diary[] { return readTable<Diary>("diaries").filter(d => d.date === date); }
-export function getDiaryByDateAndUser(date: string, userId: string): Diary | undefined {
-  return readTable<Diary>("diaries").find(d => d.date === date && d.userId === userId);
+export async function getDiary(id: string): Promise<Diary | undefined> {
+  return (await readTable<Diary>("diaries")).find(d => d.id === id);
 }
-export function getDiary(id: string): Diary | undefined { return readTable<Diary>("diaries").find(d => d.id === id); }
-export function createDiary(d: Omit<Diary, "id" | "createdAt" | "updatedAt">): Diary {
-  const list = readTable<Diary>("diaries"); const now = new Date().toISOString();
+export async function upsertDiary(d: Omit<Diary, "id" | "createdAt" | "updatedAt">): Promise<Diary> {
+  const list = await readTable<Diary>("diaries"); const now = new Date().toISOString();
+  const idx = list.findIndex(x => x.date === d.date && x.userId === d.userId);
+  if (idx >= 0) { list[idx] = { ...list[idx], ...d, updatedAt: now }; await writeTable("diaries", list); return list[idx]; }
   const item: Diary = { ...d, id: genId(), createdAt: now, updatedAt: now };
-  list.push(item); writeTable("diaries", list); return item;
+  list.push(item); await writeTable("diaries", list); return item;
 }
-export function upsertDiary(d: Omit<Diary, "id" | "createdAt" | "updatedAt">): Diary {
-  const list = readTable<Diary>("diaries"); const now = new Date().toISOString();
-  const existing = list.findIndex(x => x.date === d.date && x.userId === d.userId);
-  if (existing >= 0) {
-    list[existing] = { ...list[existing], ...d, updatedAt: now };
-    writeTable("diaries", list); return list[existing];
-  }
-  const item: Diary = { ...d, id: genId(), createdAt: now, updatedAt: now };
-  list.push(item); writeTable("diaries", list); return item;
-}
-export function updateDiary(id: string, u: Partial<Omit<Diary, "id" | "createdAt">>): Diary | null {
-  const list = readTable<Diary>("diaries"); const idx = list.findIndex(d => d.id === id);
+export async function updateDiary(id: string, u: Partial<Omit<Diary, "id" | "createdAt">>): Promise<Diary | null> {
+  const list = await readTable<Diary>("diaries"); const idx = list.findIndex(d => d.id === id);
   if (idx === -1) return null;
-  list[idx] = { ...list[idx], ...u, updatedAt: new Date().toISOString() }; writeTable("diaries", list); return list[idx];
+  list[idx] = { ...list[idx], ...u, updatedAt: new Date().toISOString() }; await writeTable("diaries", list); return list[idx];
 }
-export function deleteDiary(id: string): boolean {
-  const list = readTable<Diary>("diaries"); const idx = list.findIndex(d => d.id === id);
-  if (idx === -1) return false; list.splice(idx, 1); writeTable("diaries", list); return true;
+export async function deleteDiary(id: string): Promise<boolean> {
+  const list = await readTable<Diary>("diaries"); const idx = list.findIndex(d => d.id === id);
+  if (idx === -1) return false; list.splice(idx, 1); await writeTable("diaries", list); return true;
 }
 
 // ===== Photos =====
-export function getPhotos(): Photo[] { return readTable<Photo>("photos").sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)); }
-export function addPhoto(p: Omit<Photo, "id" | "createdAt">): Photo {
-  const list = readTable<Photo>("photos"); const item: Photo = { ...p, id: genId(), createdAt: new Date().toISOString() };
-  list.push(item); writeTable("photos", list); return item;
+export async function getPhotos(): Promise<Photo[]> {
+  return (await readTable<Photo>("photos")).sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
 }
-export function deletePhoto(id: string): boolean {
-  const list = readTable<Photo>("photos"); const idx = list.findIndex(p => p.id === id);
-  if (idx === -1) return false; list.splice(idx, 1); writeTable("photos", list); return true;
+export async function addPhoto(p: Omit<Photo, "id" | "createdAt">): Promise<Photo> {
+  const list = await readTable<Photo>("photos"); const item: Photo = { ...p, id: genId(), createdAt: new Date().toISOString() };
+  list.push(item); await writeTable("photos", list); return item;
+}
+export async function deletePhoto(id: string): Promise<boolean> {
+  const list = await readTable<Photo>("photos"); const idx = list.findIndex(p => p.id === id);
+  if (idx === -1) return false; list.splice(idx, 1); await writeTable("photos", list); return true;
 }
 
 // ===== Private Photos =====
-export function getPrivatePhotos(): Photo[] { return readTable<Photo>("private-photos").sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)); }
-export function addPrivatePhoto(p: Omit<Photo, "id" | "createdAt">): Photo {
-  const list = readTable<Photo>("private-photos"); const item: Photo = { ...p, id: genId(), createdAt: new Date().toISOString() };
-  list.push(item); writeTable("private-photos", list); return item;
+export async function getPrivatePhotos(): Promise<Photo[]> {
+  return (await readTable<Photo>("private-photos")).sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
 }
-export function deletePrivatePhoto(id: string): boolean {
-  const list = readTable<Photo>("private-photos"); const idx = list.findIndex(p => p.id === id);
-  if (idx === -1) return false; list.splice(idx, 1); writeTable("private-photos", list); return true;
+export async function addPrivatePhoto(p: Omit<Photo, "id" | "createdAt">): Promise<Photo> {
+  const list = await readTable<Photo>("private-photos"); const item: Photo = { ...p, id: genId(), createdAt: new Date().toISOString() };
+  list.push(item); await writeTable("private-photos", list); return item;
 }
-export function getPrivateUploadDir(): string {
-  const dir = path.join(process.cwd(), "public", "uploads", "private");
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }); return dir;
+export async function deletePrivatePhoto(id: string): Promise<boolean> {
+  const list = await readTable<Photo>("private-photos"); const idx = list.findIndex(p => p.id === id);
+  if (idx === -1) return false; list.splice(idx, 1); await writeTable("private-photos", list); return true;
 }
 
 // ===== Anniversaries =====
-export function getAnniversaries(): Anniversary[] { return readTable<Anniversary>("anniversaries").sort((a, b) => +new Date(a.date) - +new Date(b.date)); }
-export function createAnniversary(d: Omit<Anniversary, "id" | "createdAt">): Anniversary {
-  const list = readTable<Anniversary>("anniversaries"); const item: Anniversary = { ...d, id: genId(), createdAt: new Date().toISOString() };
-  list.push(item); writeTable("anniversaries", list); return item;
+export async function getAnniversaries(): Promise<Anniversary[]> {
+  return (await readTable<Anniversary>("anniversaries")).sort((a, b) => +new Date(a.date) - +new Date(b.date));
 }
-export function deleteAnniversary(id: string): boolean {
-  const list = readTable<Anniversary>("anniversaries"); const idx = list.findIndex(a => a.id === id);
-  if (idx === -1) return false; list.splice(idx, 1); writeTable("anniversaries", list); return true;
+export async function createAnniversary(d: Omit<Anniversary, "id" | "createdAt">): Promise<Anniversary> {
+  const list = await readTable<Anniversary>("anniversaries"); const item: Anniversary = { ...d, id: genId(), createdAt: new Date().toISOString() };
+  list.push(item); await writeTable("anniversaries", list); return item;
+}
+export async function deleteAnniversary(id: string): Promise<boolean> {
+  const list = await readTable<Anniversary>("anniversaries"); const idx = list.findIndex(a => a.id === id);
+  if (idx === -1) return false; list.splice(idx, 1); await writeTable("anniversaries", list); return true;
 }
 
 // ===== Profile =====
-export function getProfile(id: string): Profile | undefined { return readTable<Profile>("profiles").find(p => p.id === id); }
-export function saveProfile(profile: Profile): void {
-  const list = readTable<Profile>("profiles"); const idx = list.findIndex(p => p.id === profile.id);
+export async function getProfile(id: string): Promise<Profile | undefined> {
+  return (await readTable<Profile>("profiles")).find(p => p.id === id);
+}
+export async function saveProfile(profile: Profile): Promise<void> {
+  const list = await readTable<Profile>("profiles"); const idx = list.findIndex(p => p.id === profile.id);
   if (idx >= 0) list[idx] = profile; else list.push(profile);
-  writeTable("profiles", list);
+  await writeTable("profiles", list);
 }
 
 // ===== Notes =====
-export function getNotes(): Note[] { return readTable<Note>("notes").sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)); }
-export function createNote(d: Omit<Note, "id" | "createdAt" | "read">): Note {
-  const list = readTable<Note>("notes"); const item: Note = { ...d, id: genId(), createdAt: new Date().toISOString(), read: false };
-  list.push(item); writeTable("notes", list); return item;
+export async function getNotes(): Promise<Note[]> {
+  return (await readTable<Note>("notes")).sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
 }
-export function markNoteRead(id: string): void {
-  const list = readTable<Note>("notes"); const n = list.find(x => x.id === id);
-  if (n) { n.read = true; writeTable("notes", list); }
+export async function createNote(d: Omit<Note, "id" | "createdAt" | "read">): Promise<Note> {
+  const list = await readTable<Note>("notes"); const item: Note = { ...d, id: genId(), createdAt: new Date().toISOString(), read: false };
+  list.push(item); await writeTable("notes", list); return item;
+}
+export async function markNoteRead(id: string): Promise<void> {
+  const list = await readTable<Note>("notes"); const n = list.find(x => x.id === id);
+  if (n) { n.read = true; await writeTable("notes", list); }
 }
 
 // ===== Wishes =====
-export function getWishes(): Wish[] { return readTable<Wish>("wishes").sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)); }
-export function createWish(d: Omit<Wish, "id" | "createdAt" | "done">): Wish {
-  const list = readTable<Wish>("wishes"); const item: Wish = { ...d, id: genId(), createdAt: new Date().toISOString(), done: false };
-  list.push(item); writeTable("wishes", list); return item;
+export async function getWishes(): Promise<Wish[]> {
+  return (await readTable<Wish>("wishes")).sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
 }
-export function toggleWish(id: string): Wish | null {
-  const list = readTable<Wish>("wishes"); const w = list.find(x => x.id === id);
-  if (!w) return null; w.done = !w.done; writeTable("wishes", list); return w;
+export async function createWish(d: Omit<Wish, "id" | "createdAt" | "done">): Promise<Wish> {
+  const list = await readTable<Wish>("wishes"); const item: Wish = { ...d, id: genId(), createdAt: new Date().toISOString(), done: false };
+  list.push(item); await writeTable("wishes", list); return item;
 }
-export function deleteWish(id: string): boolean {
-  const list = readTable<Wish>("wishes"); const idx = list.findIndex(x => x.id === id);
-  if (idx === -1) return false; list.splice(idx, 1); writeTable("wishes", list); return true;
+export async function toggleWish(id: string): Promise<Wish | null> {
+  const list = await readTable<Wish>("wishes"); const w = list.find(x => x.id === id);
+  if (!w) return null; w.done = !w.done; await writeTable("wishes", list); return w;
+}
+export async function deleteWish(id: string): Promise<boolean> {
+  const list = await readTable<Wish>("wishes"); const idx = list.findIndex(x => x.id === id);
+  if (idx === -1) return false; list.splice(idx, 1); await writeTable("wishes", list); return true;
 }
 
-// ===== Uploads =====
+// ===== Uploads (Vercel 上用 /tmp) =====
+import path from "path";
+import fs from "fs";
 export function getUploadDir(): string {
-  const dir = path.join(process.cwd(), "public", "uploads");
+  const dir = process.env.VERCEL ? "/tmp/uploads" : path.join(process.cwd(), "public", "uploads");
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }); return dir;
+}
+export function getPrivateUploadDir(): string {
+  const dir = process.env.VERCEL ? "/tmp/uploads/private" : path.join(process.cwd(), "public", "uploads", "private");
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }); return dir;
 }

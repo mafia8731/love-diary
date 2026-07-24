@@ -13,7 +13,7 @@ function checkAuth(request: Request) {
 
 export async function GET(request: Request) {
   if (!checkAuth(request)) return NextResponse.json({ error: "密码错误" }, { status: 403 });
-  return NextResponse.json(getPrivatePhotos().map(p => ({ ...p, public_url: `/uploads/private/${p.filename}` })));
+  return NextResponse.json((await getPrivatePhotos()).map(p => ({ ...p, public_url: `/uploads/private/${p.filename}` })));
 }
 
 export async function POST(request: Request) {
@@ -31,17 +31,17 @@ export async function POST(request: Request) {
     await writeFile(path.join(getPrivateUploadDir(), filename), buffer);
   }
 
-  const photo = addPrivatePhoto({ userId: session.username || "unknown", diaryId: null, filename, caption });
+  const photo = await addPrivatePhoto({ userId: session.username || "unknown", diaryId: null, filename, caption });
   return NextResponse.json({ ...photo, public_url: `/uploads/private/${filename}` });
 }
 
 export async function DELETE(request: Request) {
   if (!checkAuth(request)) return NextResponse.json({ error: "密码错误" }, { status: 403 });
   const { id } = await request.json();
-  const photo = getPrivatePhotos().find(p => p.id === id);
+  const photo = (await getPrivatePhotos()).find(p => p.id === id);
   if (photo) {
     try { await unlink(path.join(getPrivateUploadDir(), photo.filename)); } catch {}
-    deletePrivatePhoto(id);
+    await deletePrivatePhoto(id);
   }
   return NextResponse.json({ ok: true });
 }
