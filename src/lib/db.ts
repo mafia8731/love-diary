@@ -27,7 +27,7 @@ async function writeTable<T>(name: string, data: T[]): Promise<void> {
 }
 
 export interface Diary { id: string; userId: string; date: string; title: string; content: string; mood: string; weather: string; location: string; createdAt: string; updatedAt: string; }
-export interface Photo { id: string; userId: string; diaryId: string | null; filename: string; caption: string; createdAt: string; }
+export interface Photo { id: string; userId: string; diaryId: string | null; data: string; caption: string; createdAt: string; }
 export interface Anniversary { id: string; userId: string; title: string; date: string; description: string; icon: string; isRecurring: boolean; createdAt: string; }
 export interface Profile { id: string; displayName: string; }
 export interface Note { id: string; fromUser: string; toUser: string; content: string; createdAt: string; read: boolean; }
@@ -131,12 +131,4 @@ export async function toggleWish(id: string): Promise<Wish | null> {
 export async function deleteWish(id: string): Promise<boolean> {
   const list = await readTable<Wish>("wishes"); const idx = list.findIndex(x => x.id === id);
   if (idx === -1) return false; list.splice(idx, 1); await writeTable("wishes", list); return true;
-}
-
-import fs from "fs";
-export function getUploadDir(): string {
-  const dir = "/tmp/uploads"; if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }); return dir;
-}
-export function getPrivateUploadDir(): string {
-  const dir = "/tmp/uploads/private"; if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }); return dir;
 }

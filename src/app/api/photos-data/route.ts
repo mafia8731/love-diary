@@ -1,15 +1,16 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
-import { getPhotos, addPhoto, deletePhoto, getUploadDir } from "@/lib/db";
-import { writeFile, unlink } from "fs/promises";
-import path from "path";
+import { getPhotos, addPhoto, deletePhoto } from "@/lib/db";
+import { encrypt, bytesToBmp } from "@/lib/crypto";
+
+const IMGBB_KEY = "76975197dc3afa38ab09b4dad6b09df3";
 
 export async function GET() {
   const session = await getSession();
   if (!session.isLoggedIn) return NextResponse.json({ error: "未登录" }, { status: 401 });
   return NextResponse.json((await getPhotos()).map(p => ({
-    ...p,
-    public_url: `/uploads/${p.filename}`,
+    id: p.id, caption: p.caption, createdAt: p.createdAt, userId: p.userId,
+    imgbbUrl: p.data, // imgbb 直链，客户端自行解密
   })));
 }
 
@@ -22,28 +23,31 @@ export async function POST(request: Request) {
   const caption = (formData.get("caption") as string) || "";
   const diaryId = (formData.get("diaryId") as string) || null;
 
-  let filename = "";
-  if (file) {
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-    filename = `${Date.now()}-${file.name}`;
-    const uploadDir = getUploadDir();
-    await writeFile(path.join(uploadDir, filename), buffer);
-  }
+  if (!file) return NextResponse.json({ error: "无图片" }, { status: 400 });
 
-  const photo = await addPhoto({ userId: session.username!, diaryId, filename, caption });
-  return NextResponse.json({ ...photo, public_url: `/uploads/${filename}` });
+  // 1. 读取图片 → XOR 加密 → 打包 BMP
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const encrypted = encrypt(bytes);
+  const bmp = bytesToBmp(encrypted);
+
+  // 2. 上传到 imgbb
+  const upForm = new FormData();
+  upForm.append("image", bmp, "encrypted.bmp");
+  const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, {
+    method: "POST", body: upForm,
+  });
+  const result = await res.json();
+  if (!result.success) return NextResponse.json({ error: "上传失败" }, { status: 500 });
+
+  const url = result.data.url; // imgbb 直链
+  const photo = await addPhoto({ userId: session.username!, diaryId, data: url, caption });
+  return NextResponse.json({ id: photo.id, caption: photo.caption, createdAt: photo.createdAt, userId: photo.userId, imgbbUrl: url });
 }
 
 export async function DELETE(request: Request) {
   const session = await getSession();
   if (!session.isLoggedIn) return NextResponse.json({ error: "未登录" }, { status: 401 });
   const { id } = await request.json();
-  const photo = (await getPhotos()).find(p => p.id === id);
-  if (photo) {
-    // 删除文件
-    try { await unlink(path.join(getUploadDir(), photo.filename)); } catch {}
-    await deletePhoto(id);
-  }
+  await deletePhoto(id);
   return NextResponse.json({ ok: true });
 }

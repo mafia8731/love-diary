@@ -2,10 +2,11 @@
 
 import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import EncryptedImage from "@/components/EncryptedImage";
 import { ArrowLeft, X, Plus, Upload, ImagePlus, CheckCircle, Trash2, LayoutGrid, LayoutList, Lock, Eye } from "lucide-react";
 import Link from "next/link";
 
-interface Photo { id: string; public_url: string; caption: string; createdAt: string; }
+interface Photo { id: string; imgbbUrl: string; caption: string; createdAt: string; }
 
 export default function GalleryPage() {
   const [photos, setPhotos] = useState<Photo[]>([]);
@@ -170,7 +171,7 @@ export default function GalleryPage() {
                 <motion.div key={p.id} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.02 }}
                   className={`relative aspect-square rounded-2xl overflow-hidden cursor-pointer hover:shadow-lg transition-all ${deleteMode ? "hover:scale-100" : "hover:scale-[1.02]"}`}
                   onClick={() => deleteMode ? toggleSelect(p.id) : setSelected(p)}>
-                  <img src={p.public_url} alt={p.caption || ""} className="w-full h-full object-cover" loading="lazy" />
+                  <EncryptedImage imgbbUrl={p.imgbbUrl} alt={p.caption || ""} className="w-full h-full object-cover" />
                   {deleteMode && (
                     <div className={`absolute inset-0 flex items-center justify-center transition-colors ${selectedIds.has(p.id) ? "bg-rose/30" : "bg-black/10 hover:bg-black/20"}`}>
                       <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${selectedIds.has(p.id) ? "bg-rose border-rose" : "border-white"}`}>
@@ -191,7 +192,7 @@ export default function GalleryPage() {
             <button onClick={() => deleteSingle(selected.id)} className="text-white/50 hover:text-red-400 transition-colors"><Trash2 className="w-6 h-6" /></button>
             <button onClick={() => setSelected(null)} className="text-white/80 hover:text-white"><X className="w-8 h-8" /></button>
           </div>
-          <img src={selected.public_url} alt={selected.caption || ""} className="max-w-full max-h-[85vh] rounded-2xl object-contain" onClick={e => e.stopPropagation()} />
+          <EncryptedImage imgbbUrl={selected.imgbbUrl} alt={selected.caption || ""} className="max-w-full max-h-[85vh] rounded-2xl object-contain" onClick={(e: React.MouseEvent) => e.stopPropagation()} />
           {selected.caption && <p className="absolute bottom-8 text-white/80 text-sm">{selected.caption}</p>}
         </div>
       )}
