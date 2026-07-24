@@ -1,47 +1,29 @@
-// 用 fetch 直接调 Upstash REST API — 零依赖
-const REDIS_URL = process.env.REDIS_URL || "";
+import { createClient } from "redis";
 
-// 解析 REDIS_URL: redis://default:PASSWORD@HOST:PORT
-function getRestCreds() {
-  const m = REDIS_URL.match(/redis:\/\/default:([^@]+)@([^:]+):/);
-  if (!m) return null;
-  return { token: m[1], host: m[2] };
-}
+let clientPromise: Promise<ReturnType<typeof createClient>> | null = null;
 
-async function redisCmd(command: string, ...args: (string | number)[]): Promise<any> {
-  const creds = getRestCreds();
-  if (!creds) throw new Error("REDIS_URL not configured");
-
-  const res = await fetch(`https://${creds.host}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${creds.token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify([command, ...args]),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Redis ${command} failed: ${text}`);
+async function getClient() {
+  if (!clientPromise) {
+    const client = createClient({ url: process.env.REDIS_URL });
+    client.on("error", () => {});
+    clientPromise = client.connect().then(() => client);
   }
-
-  const data = await res.json();
-  if (data.error) throw new Error(data.error);
-  return data.result;
+  return clientPromise;
 }
 
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 
 async function readTable<T>(name: string): Promise<T[]> {
   try {
-    const data = await redisCmd("GET", name);
+    const client = await getClient();
+    const data = await client.get(name);
     return data ? JSON.parse(data) : [];
   } catch { return []; }
 }
 
 async function writeTable<T>(name: string, data: T[]): Promise<void> {
-  await redisCmd("SET", name, JSON.stringify(data));
+  const client = await getClient();
+  await client.set(name, JSON.stringify(data));
 }
 
 export interface Diary { id: string; userId: string; date: string; title: string; content: string; mood: string; weather: string; location: string; createdAt: string; updatedAt: string; }
@@ -51,7 +33,6 @@ export interface Profile { id: string; displayName: string; }
 export interface Note { id: string; fromUser: string; toUser: string; content: string; createdAt: string; read: boolean; }
 export interface Wish { id: string; userId: string; content: string; done: boolean; date: string; createdAt: string; }
 
-// ===== Diaries =====
 export async function getDiaries(): Promise<Diary[]> {
   const d = await readTable<Diary>("diaries"); return d.sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
 }
@@ -79,7 +60,6 @@ export async function deleteDiary(id: string): Promise<boolean> {
   if (idx === -1) return false; list.splice(idx, 1); await writeTable("diaries", list); return true;
 }
 
-// ===== Photos =====
 export async function getPhotos(): Promise<Photo[]> {
   return (await readTable<Photo>("photos")).sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
 }
@@ -104,7 +84,6 @@ export async function deletePrivatePhoto(id: string): Promise<boolean> {
   if (idx === -1) return false; list.splice(idx, 1); await writeTable("private-photos", list); return true;
 }
 
-// ===== Anniversaries =====
 export async function getAnniversaries(): Promise<Anniversary[]> {
   return (await readTable<Anniversary>("anniversaries")).sort((a, b) => +new Date(a.date) - +new Date(b.date));
 }
@@ -117,7 +96,6 @@ export async function deleteAnniversary(id: string): Promise<boolean> {
   if (idx === -1) return false; list.splice(idx, 1); await writeTable("anniversaries", list); return true;
 }
 
-// ===== Profile =====
 export async function getProfile(id: string): Promise<Profile | undefined> {
   return (await readTable<Profile>("profiles")).find(p => p.id === id);
 }
@@ -127,7 +105,6 @@ export async function saveProfile(profile: Profile): Promise<void> {
   await writeTable("profiles", list);
 }
 
-// ===== Notes =====
 export async function getNotes(): Promise<Note[]> {
   return (await readTable<Note>("notes")).sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
 }
@@ -140,7 +117,6 @@ export async function markNoteRead(id: string): Promise<void> {
   if (n) { n.read = true; await writeTable("notes", list); }
 }
 
-// ===== Wishes =====
 export async function getWishes(): Promise<Wish[]> {
   return (await readTable<Wish>("wishes")).sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
 }
@@ -157,13 +133,10 @@ export async function deleteWish(id: string): Promise<boolean> {
   if (idx === -1) return false; list.splice(idx, 1); await writeTable("wishes", list); return true;
 }
 
-// ===== Uploads =====
 import fs from "fs";
 export function getUploadDir(): string {
-  const dir = "/tmp/uploads";
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }); return dir;
+  const dir = "/tmp/uploads"; if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }); return dir;
 }
 export function getPrivateUploadDir(): string {
-  const dir = "/tmp/uploads/private";
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }); return dir;
+  const dir = "/tmp/uploads/private"; if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }); return dir;
 }
