@@ -97,7 +97,7 @@ function FloatingHearts() {
 }
 
 // ===== 纪念日 =====
-const ANNIVERSARY_DATE = new Date("2023-01-01");
+const ANNIVERSARY_DATE = new Date("2025-09-18");
 function getDaysSince(date: Date) { return Math.floor((Date.now() - date.getTime()) / 86400000); }
 function getNextAnniversary(date: Date) {
   const now = new Date();

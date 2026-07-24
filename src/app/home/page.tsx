@@ -20,7 +20,7 @@ const ALL_MOODS = [
 ];
 const MOOD_MAP: Record<string, string> = Object.fromEntries(ALL_MOODS.map(m => [m.value, m.emoji]));
 const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
-const ANNIVERSARY_DATE = new Date("2023-01-01");
+const ANNIVERSARY_DATE = new Date("2025-09-18");
 
 const fade = { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -5 } };
 
