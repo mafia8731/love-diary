@@ -18,7 +18,7 @@ export interface Photo { id: string; userId: string; diaryId: string | null; fil
 export interface Anniversary { id: string; userId: string; title: string; date: string; description: string; icon: string; isRecurring: boolean; createdAt: string; }
 export interface Profile { id: string; displayName: string; }
 export interface Note { id: string; fromUser: string; toUser: string; content: string; createdAt: string; read: boolean; }
-export interface Wish { id: string; userId: string; content: string; done: boolean; createdAt: string; }
+export interface Wish { id: string; userId: string; content: string; done: boolean; date: string; createdAt: string; }
 
 // ===== Diaries =====
 export function getDiaries(): Diary[] { return readTable<Diary>("diaries").sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)); }

@@ -11,8 +11,8 @@ export async function GET() {
 export async function POST(request: Request) {
   const session = await getSession();
   if (!session.isLoggedIn) return NextResponse.json({ error: "未登录" }, { status: 401 });
-  const { content } = await request.json();
-  const wish = createWish({ userId: session.username!, content });
+  const { content, date } = await request.json();
+  const wish = createWish({ userId: session.username!, content, date: date || new Date().toISOString().slice(0, 10) });
   return NextResponse.json(wish);
 }
 
