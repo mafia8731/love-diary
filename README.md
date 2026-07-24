@@ -1,36 +1,43 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 💝 Love Diary — 情侣日记
 
-## Getting Started
+属于两个人的私密记录空间。
 
-First, run the development server:
+## 功能
 
+- 🗓️ **日历** — 核心页面，点击日期记录心情和日记
+- 📝 **日记** — 双方各自记录，不互相覆盖
+- 💌 **小纸条** — 两人互发私密消息
+- ✨ **愿望清单** — 共同心愿，完成勾选
+- 🖼️ **照片墙** — 支持上传、删除、自定义布局
+- 🔒 **隐私相册** — 密码保护的私密照片（密码：050825）
+- 📅 **纪念日** — 重要日期管理和倒计时
+
+## 技术栈
+
+- Next.js 16 + React 19 + TypeScript
+- Tailwind CSS + Framer Motion
+- Upstash Redis（Vercel 集成）
+- Three.js 3D 粒子首页
+
+## 部署
+
+### Vercel
+1. Fork 本仓库
+2. Vercel → Import → 选仓库
+3. Settings → Environment Variables：
+   - `SESSION_SECRET`：自定义密钥（至少 32 字符）
+4. Storage → 创建 Upstash Redis
+5. Deploy
+
+### 纪念日设置
+编辑 `src/app/page.tsx` 和 `src/app/home/page.tsx` 中的 `ANNIVERSARY_DATE`。
+
+## 预置账号
+- guohanxi / liumengqi
+- liumengqi / guohanxi
+
+## 本地开发
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
