@@ -1,6 +1,6 @@
 import { Redis } from "@upstash/redis";
 
-const redis = new Redis({ url: process.env.REDIS_URL! });
+const redis = Redis.fromEnv();
 
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 
@@ -8,7 +8,7 @@ async function readTable<T>(name: string): Promise<T[]> {
   try { const data = await redis.get<T[]>(name); return data || []; } catch { return []; }
 }
 async function writeTable<T>(name: string, data: T[]): Promise<void> {
-  await redis.set(name, data as any);
+  try { await redis.set(name, data as any); } catch (e) { console.error("[DB] write failed:", e); throw e; }
 }
 
 export interface Diary { id: string; userId: string; date: string; title: string; content: string; mood: string; weather: string; location: string; createdAt: string; updatedAt: string; }
