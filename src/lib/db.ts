@@ -1,33 +1,47 @@
-import Redis from "ioredis";
+// 用 fetch 直接调 Upstash REST API — 零依赖
+const REDIS_URL = process.env.REDIS_URL || "";
 
-const redis = new Redis(process.env.REDIS_URL! + "?family=0", {
-  tls: { rejectUnauthorized: false },
-  maxRetriesPerRequest: 1,
-  retryStrategy: () => null,
-  lazyConnect: true,
-});
+// 解析 REDIS_URL: redis://default:PASSWORD@HOST:PORT
+function getRestCreds() {
+  const m = REDIS_URL.match(/redis:\/\/default:([^@]+)@([^:]+):/);
+  if (!m) return null;
+  return { token: m[1], host: m[2] };
+}
 
-// 延迟连接（仅在首次操作时连接）
-let connected = false;
-async function ensureConnected() {
-  if (!connected) {
-    try { await redis.connect(); connected = true; } catch {}
+async function redisCmd(command: string, ...args: (string | number)[]): Promise<any> {
+  const creds = getRestCreds();
+  if (!creds) throw new Error("REDIS_URL not configured");
+
+  const res = await fetch(`https://${creds.host}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${creds.token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify([command, ...args]),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Redis ${command} failed: ${text}`);
   }
+
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data.result;
 }
 
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 
 async function readTable<T>(name: string): Promise<T[]> {
   try {
-    await ensureConnected();
-    const data = await redis.get(name);
+    const data = await redisCmd("GET", name);
     return data ? JSON.parse(data) : [];
   } catch { return []; }
 }
 
 async function writeTable<T>(name: string, data: T[]): Promise<void> {
-  await ensureConnected();
-  await redis.set(name, JSON.stringify(data));
+  await redisCmd("SET", name, JSON.stringify(data));
 }
 
 export interface Diary { id: string; userId: string; date: string; title: string; content: string; mood: string; weather: string; location: string; createdAt: string; updatedAt: string; }

@@ -1,30 +1,46 @@
 import { NextResponse } from "next/server";
-import Redis from "ioredis";
 
 export async function GET() {
-  const results: Record<string, any> = {};
   const raw = process.env.REDIS_URL || "";
+  const m = raw.match(/redis:\/\/default:([^@]+)@([^:]+):/);
 
-  results.rawUrl = raw.replace(/\/\/default:[^@]+@/, "//default:***@");
-
-  try {
-    const redis = new Redis(raw + "?family=0", {
-      tls: { rejectUnauthorized: false },
-      maxRetriesPerRequest: 1,
-      lazyConnect: true,
-    });
-    await redis.connect();
-
-    const testKey = "debug-test";
-    await redis.set(testKey, JSON.stringify({ time: Date.now() }));
-    const val = await redis.get(testKey);
-    await redis.del(testKey);
-    await redis.quit();
-
-    results.redis = { status: "成功", value: val ? JSON.parse(val) : null };
-  } catch (e: any) {
-    results.redis = { status: "失败", error: e.message };
+  if (!m) {
+    return NextResponse.json({ error: "无法解析 REDIS_URL" });
   }
 
-  return NextResponse.json(results);
+  const token = m[1];
+  const host = m[2];
+
+  try {
+    const res = await fetch(`https://${host}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(["SET", "debug-test", JSON.stringify({ time: Date.now() })]),
+    });
+
+    if (!res.ok) {
+      return NextResponse.json({ status: "失败", httpStatus: res.status, body: await res.text() });
+    }
+
+    const data = await res.json();
+
+    // 清理
+    await fetch(`https://${host}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(["DEL", "debug-test"]),
+    });
+
+    return NextResponse.json({
+      status: "成功",
+      host,
+      tokenLen: token.length,
+      restResult: data,
+    });
+  } catch (e: any) {
+    return NextResponse.json({ status: "失败", error: e.message });
+  }
 }
