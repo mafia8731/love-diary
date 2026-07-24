@@ -9,7 +9,6 @@ export function obfuscate(bytes: Uint8Array): Uint8Array {
 }
 export const deobfuscate = obfuscate;
 
-// 分块转 base64，避免大数组爆栈
 function bytesToBase64(bytes: Uint8Array): string {
   const chunk = 8192;
   const parts: string[] = [];
@@ -26,8 +25,8 @@ function base64ToBytes(base64: string): Uint8Array {
   return bytes;
 }
 
-// 压缩图片
-export async function compressImage(file: File, maxW = 1200, quality = 0.7): Promise<string> {
+// Canvas 压缩（任意尺寸、格式）
+function canvasCompress(file: File, maxW: number, quality: number, format = "image/webp"): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
@@ -36,21 +35,30 @@ export async function compressImage(file: File, maxW = 1200, quality = 0.7): Pro
       const canvas = document.createElement("canvas");
       canvas.width = w; canvas.height = h;
       canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
-      resolve(canvas.toDataURL("image/jpeg", quality));
+      resolve(canvas.toDataURL(format, quality));
     };
     img.onerror = reject;
     img.src = URL.createObjectURL(file);
   });
 }
 
-// 加密 → 可存储字符串
+// 生成缩略图（200px, WebP, 低质量 → ~5KB）
+export async function compressThumb(file: File): Promise<string> {
+  return canvasCompress(file, 200, 0.45, "image/webp");
+}
+
+// 生成大图（1200px, WebP, 中质量 → ~35KB）
+export async function compressImage(file: File): Promise<string> {
+  return canvasCompress(file, 1200, 0.7, "image/webp");
+}
+
+// 加密 data URL → 可存储字符串
 export async function encryptDataUrl(dataUrl: string): Promise<string> {
   const res = await fetch(dataUrl);
   const blob = await res.blob();
   const bytes = new Uint8Array(await blob.arrayBuffer());
   const enc = obfuscate(bytes);
-  const base64 = bytesToBase64(enc);
-  return `enc:${blob.type}:${base64}`;
+  return `enc:${blob.type}:${bytesToBase64(enc)}`;
 }
 
 // 解密 → data URL

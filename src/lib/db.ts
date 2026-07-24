@@ -31,7 +31,7 @@ async function writeTable<T>(name: string, data: T[]): Promise<void> {
 }
 
 export interface Diary { id: string; userId: string; date: string; title: string; content: string; mood: string; weather: string; location: string; createdAt: string; updatedAt: string; }
-export interface Photo { id: string; userId: string; diaryId: string | null; data: string; caption: string; createdAt: string; }
+export interface Photo { id: string; userId: string; diaryId: string | null; data: string; fullData?: string; caption: string; createdAt: string; }
 export interface Anniversary { id: string; userId: string; title: string; date: string; description: string; icon: string; isRecurring: boolean; createdAt: string; }
 export interface Profile { id: string; displayName: string; }
 export interface Note { id: string; fromUser: string; toUser: string; content: string; createdAt: string; read: boolean; }

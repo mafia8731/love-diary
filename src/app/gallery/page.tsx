@@ -4,9 +4,9 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, X, Plus, Upload, ImagePlus, CheckCircle, Trash2, LayoutGrid, LayoutList, Lock } from "lucide-react";
 import Link from "next/link";
-import { compressImage, encryptDataUrl, decryptToUrl } from "@/lib/compress";
+import { compressImage, compressThumb, encryptDataUrl, decryptToUrl } from "@/lib/compress";
 
-interface PhotoMeta { id: string; caption: string; createdAt: string; userId: string; hasData: boolean; }
+interface PhotoMeta { id: string; caption: string; createdAt: string; userId: string; public_url: string; }
 interface Photo extends PhotoMeta { public_url: string; }
 
 function LazyPhoto({ photo, onClick }: { photo: PhotoMeta; onClick: () => void }) {
@@ -14,11 +14,10 @@ function LazyPhoto({ photo, onClick }: { photo: PhotoMeta; onClick: () => void }
   const loaded = useRef(false);
 
   useEffect(() => {
-    if (loaded.current) return;
+    if (loaded.current || !photo.public_url) return;
     loaded.current = true;
-    fetch(`/api/photos-data?id=${photo.id}`).then(r => r.json())
-      .then(d => { if (d.public_url) decryptToUrl(d.public_url).then(setUrl); });
-  }, [photo.id]);
+    decryptToUrl(photo.public_url).then(setUrl);
+  }, [photo.public_url]);
 
   if (!url) return <div className="w-full h-full bg-gray-100 animate-pulse rounded-2xl" />;
 
@@ -56,9 +55,12 @@ export default function GalleryPage() {
     if (files.length === 0) return;
     setUploading(true);
     for (const f of files) {
-      const compressed = await compressImage(f, 1200, 0.7);
-      const encrypted = await encryptDataUrl(compressed);
-      const fd = new FormData(); fd.append("dataUrl", encrypted);
+      const thumb = await compressThumb(f);
+      const full = await compressImage(f);
+      const encryptedThumb = await encryptDataUrl(thumb);
+      const encryptedFull = await encryptDataUrl(full);
+      const fd = new FormData(); fd.append("dataUrl", encryptedThumb);
+      fd.append("fullDataUrl", encryptedFull);
       await fetch("/api/photos-data", { method: "POST", body: fd });
     }
     setFiles([]); setPreviews([]);
