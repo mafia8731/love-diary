@@ -1,14 +1,14 @@
 import { createClient } from "redis";
 
-let clientPromise: Promise<ReturnType<typeof createClient>> | null = null;
+let client: any = null;
 
 async function getClient() {
-  if (!clientPromise) {
-    const client = createClient({ url: process.env.REDIS_URL });
+  if (!client) {
+    client = createClient({ url: process.env.REDIS_URL });
     client.on("error", () => {});
-    clientPromise = client.connect().then(() => client);
+    await client.connect();
   }
-  return clientPromise;
+  return client;
 }
 
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
